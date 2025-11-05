@@ -44,11 +44,11 @@ Weekly Progress Plan:
 
 Repository Structure:
 FYPPROJECT/
-│
-├── data/             # Dataset folder (FER2013, CK+, etc.)
-├── notebooks/        # Jupyter notebooks for training and testing
-├── models/           # Saved trained models (.h5 files)
-├── src/              # Python scripts (preprocessing, training, dashboard)
-├── reports/          # Report documents (Chapter 1–7)
-├── README.md         # Project overview (this file)
-└── requirements.txt  # Library dependencies
+
+data/             # Dataset folder (FER2013, CK+, etc.)
+notebooks/        # Jupyter notebooks for training and testing
+models/           # Saved trained models (.h5 files)
+src/              # Python scripts (preprocessing, training, dashboard)
+reports/          # Report documents (Chapter 1–7)
+README.md         # Project overview (this file)
+requirements.txt  # Library dependencies
