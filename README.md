@@ -41,3 +41,14 @@ Weekly Progress Plan:
 | **Week 10** | Testing & Evaluation           | Conduct tests with new data, analyze confusion matrix, model accuracy. |
 | **Week 11** | Documentation                  | Write Chapter 2–6, finalize report content.                            |
 | **Week 12** | Presentation & Submission      | Prepare final report, presentation slides, and upload deliverables.    |
+
+Repository Structure:
+FYPPROJECT/
+│
+├── data/             # Dataset folder (FER2013, CK+, etc.)
+├── notebooks/        # Jupyter notebooks for training and testing
+├── models/           # Saved trained models (.h5 files)
+├── src/              # Python scripts (preprocessing, training, dashboard)
+├── reports/          # Report documents (Chapter 1–7)
+├── README.md         # Project overview (this file)
+└── requirements.txt  # Library dependencies
