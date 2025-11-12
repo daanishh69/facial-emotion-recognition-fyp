@@ -29,20 +29,13 @@ Tools & Technologies:
 | Version Control      | Git & GitHub        |
 | Environment          | Anaconda, VS Code   |
 
-Weekly Progress Plan: 
-| Week        | Task                           | Description                                                            |
-| ----------- | ------------------------------ | ---------------------------------------------------------------------- |
-| **Week 4**  | Setup                          | Finalized title, set up GitHub, VS Code, and environment.              |
-| **Week 5**  | Literature Review & Dataset    | Research FER & mental health papers, download datasets (FER2013, CK+). |
-| **Week 6**  | Preprocessing & Baseline Model | Implement face detection, data augmentation, build simple CNN.         |
-| **Week 7**  | Model Optimization             | Try transfer learning, tune parameters, evaluate accuracy.             |
-| **Week 8**  | Real-Time Implementation       | Build webcam-based live emotion recognition demo.                      |
-| **Week 9**  | Dashboard Development          | Integrate with Streamlit/Flask dashboard for visualization.            |
-| **Week 10** | Testing & Evaluation           | Conduct tests with new data, analyze confusion matrix, model accuracy. |
-| **Week 11** | Documentation                  | Write Chapter 2–6, finalize report content.                            |
-| **Week 12** | Presentation & Submission      | Prepare final report, presentation slides, and upload deliverables.    |
+Weekly Progress Plan:
+**Week 1-3** : Finalized FYP proposal document that has been reviewed and signed by my supervisor.
+**Week 4**   : So far, Chapter 1 (Introduction) has been completed for Report Writing, including the background, problem statement, objectives, and scope. The development environment has been fully set up with Anaconda, VS Code, and Git. A dedicated environment named fer_env was created with all the necessary libraries, along with a requirements.txt file for easy setup. Version control was implemented through Git and connected to GitHub. A detailed README.md file was added, describing the project overview, objectives, methodology, tools, and weekly plan. The project folder was also organized into clear directories for data, models, notebooks, source code, and reports, and a .gitignore file was included to keep the repository tidy.
+**Week 5**   : For this phase, I focused on completing the literature review and requirement analysis for the project. I reviewed several studies and existing systems related to facial emotion recognition and mental health monitoring to understand the methods, datasets, and models commonly used. The project methodology was outlined, covering data collection, preprocessing, model training, and evaluation processes. I also analyzed the system’s requirements by identifying the data, functional, and non-functional needs based on the project objectives. Tools, hardware specifications, and performance expectations were clearly defined to ensure the system can run efficiently. This stage helped establish a solid foundation for the upcoming system design and implementation phases.
 
 Repository Structure:
+
 FYPPROJECT/
 
 data/             # Dataset folder (FER2013, CK+, etc.)
