@@ -37,6 +37,12 @@ Weekly Progress Plan:
 
 **Week 5**   : For this phase, I focused on completing the literature review and requirement analysis for the project. I reviewed several studies and existing systems related to facial emotion recognition and mental health monitoring to understand the methods, datasets, and models commonly used. The project methodology was outlined, covering data collection, preprocessing, model training, and evaluation processes. I also analyzed the system’s requirements by identifying the data, functional, and non-functional needs based on the project objectives. Tools, hardware specifications, and performance expectations were clearly defined to ensure the system can run efficiently. This stage helped establish a solid foundation for the upcoming system design and implementation phases.
 
+**Week 6**   : This week was focused on the implementation and testing of the facial emotion recognition model. I successfully built and trained a convolutional neural network (CNN) using the FER-2013 dataset. The model architecture included multiple convolutional, pooling, batch normalization, dropout, and dense layers, optimized using the Adam optimizer with categorical cross-entropy loss. Training was executed for 50 epochs, achieving a working model saved as emotion_model.keras in the models directory.
+
+I also created scripts for testing the model on individual images (test_model.py) and verifying the model architecture (verify_model.py). The project repository was updated with all new scripts, organized directories, and committed to GitHub with proper version control. The workflow included resolving environment issues, managing dependencies, and ensuring smooth data preprocessing with ImageDataGenerator.
+
+This week’s tasks established the core system for facial emotion recognition, enabling both training and testing, and laid the groundwork for future evaluation, visualization, and potential model improvement in the upcoming weeks.
+
 Repository Structure:
 
 FYPPROJECT/
