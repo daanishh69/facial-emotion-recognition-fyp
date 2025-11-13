@@ -1,8 +1,8 @@
-Deep Learning-Based Facial Emotion Recognition for Mental Health Monitoring
+Deep Learning-Based Facial Emotion Recognition for Mental Health Monitoring 
 
 ## Overview:
 This project aims to develop a Facial Emotion Recognition (FER) system using Deep Learning techniques to monitor emotional states as an indicator for mental health tracking.
-The system detects facial expressions from images or live video feeds and classifies them into basic emotion categories such as Happy, Sad, Angry, Fear, Surprise, and Neutral.
+The system detects facial expressions from images or live video feeds and classifies them into basic emotion categories such as Angry, Disgust, Fear, Happy, Neutral, Sad and Surprise.
 By analyzing these emotions over time, the system can support mental health awareness and early detection of emotional distress.
 
 ## Dataset:
@@ -27,10 +27,11 @@ python src/train_model.py
 4. Test the model on an image
 python src/test_model.py
 
-You can install all dependencies using:
+## You can install all dependencies using:
+
 pip install -r requirements.txt
 
-Weekly Progress Plan:
+## Weekly Progress Plan:
 
 **Week 1-3** : Finalized FYP proposal document that has been reviewed and signed by my supervisor.
 
