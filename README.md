@@ -1,33 +1,34 @@
 Deep Learning-Based Facial Emotion Recognition for Mental Health Monitoring
 
-Overview:
+## Overview:
 This project aims to develop a Facial Emotion Recognition (FER) system using Deep Learning techniques to monitor emotional states as an indicator for mental health tracking.
 The system detects facial expressions from images or live video feeds and classifies them into basic emotion categories such as Happy, Sad, Angry, Fear, Surprise, and Neutral.
 By analyzing these emotions over time, the system can support mental health awareness and early detection of emotional distress.
 
-Objectives: 
-1. To design and develop a facial emotion recognition system using deep learning.
-2. To train and evaluate a CNN model for emotion classification.
-3. To integrate the model into a real-time monitoring interface for emotion tracking.
+## Dataset:
+The project uses the [FER-2013 dataset](https://www.kaggle.com/datasets/msambare/fer2013) which contains grayscale images of faces labeled with emotions.  
+- **Training images**: 28,709  
+- **Test images**: 7,178  
+- Images are 48x48 pixels, grayscale.
 
-Methodology Overview: 
-1. Data Collection – Using public datasets such as FER2013 and CK+.
-2. Data Preprocessing – Face detection, resizing, and augmentation using OpenCV and Keras.
-3. Model Development – CNN or Transfer Learning models (e.g., MobileNetV2, EfficientNetB0).
-4. System Integration – Real-time emotion prediction via webcam using Python & OpenCV.
-5. Dashboard Development – Visualization of emotion history for potential mental health insights.
+## Installation & Setup
+1. Clone the repository
+git clone https://github.com/daanishh69/facial-emotion-recognition-fyp.git
+cd facial-emotion-recognition-fyp
 
-Tools & Technologies: 
-| Category             | Tools / Libraries   |
-| -------------------- | ------------------- |
-| Programming Language | Python 3.10         |
-| Deep Learning        | TensorFlow, Keras   |
-| Computer Vision      | OpenCV              |
-| Data Handling        | NumPy, Pandas       |
-| Visualization        | Matplotlib, Seaborn |
-| Deployment           | Streamlit / Flask   |
-| Version Control      | Git & GitHub        |
-| Environment          | Anaconda, VS Code   |
+2. Set up environment - Using Anaconda:
+conda create -n fer_new python=3.12
+conda activate fer_new
+pip install -r requirements.txt
+
+3. Run training script (optional, if want to retrain the model)
+python src/train_model.py
+
+4. Test the model on an image
+python src/test_model.py
+
+You can install all dependencies using:
+pip install -r requirements.txt
 
 Weekly Progress Plan:
 
@@ -42,15 +43,3 @@ Weekly Progress Plan:
 I also created scripts for testing the model on individual images (test_model.py) and verifying the model architecture (verify_model.py). The project repository was updated with all new scripts, organized directories, and committed to GitHub with proper version control. The workflow included resolving environment issues, managing dependencies, and ensuring smooth data preprocessing with ImageDataGenerator.
 
 This week’s tasks established the core system for facial emotion recognition, enabling both training and testing, and laid the groundwork for future evaluation, visualization, and potential model improvement in the upcoming weeks.
-
-Repository Structure:
-
-FYPPROJECT/
-
-data/             # Dataset folder (FER2013, CK+, etc.)
-notebooks/        # Jupyter notebooks for training and testing
-models/           # Saved trained models (.h5 files)
-src/              # Python scripts (preprocessing, training, dashboard)
-reports/          # Report documents (Chapter 1–7)
-README.md         # Project overview (this file)
-requirements.txt  # Library dependencies
