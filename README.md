@@ -27,6 +27,9 @@ python src/train_model.py
 4. Test the model on an image
 python src/test_model.py
 
+5. Run the app
+streamlit run app.py
+
 ## You can install all dependencies using:
 
 pip install -r requirements.txt
