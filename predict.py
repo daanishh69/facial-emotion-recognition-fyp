@@ -1,38 +1,33 @@
-import numpy as np
+# predict.py — UNIVERSAL & BULLETPROOF
 import tensorflow as tf
+import numpy as np
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input as mobilenet_preprocess
+from tensorflow.keras.applications.efficientnet import preprocess_input as efficientnet_preprocess
 
-# Emotion labels must match your training order
-EMOTIONS = ['angry','disgust','fear','happy','neutral','sad','surprise']
+EMOTIONS = ['angry','disgust','happy','neutral','sad','surprise']
 
-def load_model(model_path: str):
-    """Load a saved Keras model."""
-    model = tf.keras.models.load_model(model_path)
-    return model
+def load_model(path):
+    return tf.keras.models.load_model(path)
 
-def preprocess_grayscale_to_rgb48(img_array: np.ndarray) -> np.ndarray:
+def predict(model, arr, is_baseline=False, model_type=None):
     """
-    For transfer learning models (MobileNetV2, EfficientNetB0).
-    Input: 2D grayscale uint8 array (48x48)
-    Output: 4D float32 tensor (1,48,48,3) scaled to [0,1]
+    arr: numpy array of shape (48,48) for baseline CNN (grayscale)
+         or (H,W,3) for transfer models (RGB)
+    is_baseline: True if baseline CNN, False otherwise
+    model_type: "MobileNetV2" or "EfficientNetB0" for correct preprocessing
     """
-    rgb = np.repeat(img_array[..., None], 3, axis=-1)  # (48,48,3)
-    rgb = (rgb / 255.0).astype('float32')
-    return np.expand_dims(rgb, axis=0)  # (1,48,48,3)
+    if is_baseline:
+        # Baseline CNN expects (1,48,48,1)
+        x = np.expand_dims(arr / 255.0, axis=(0, -1))
+    else:
+        # Transfer models expect RGB with their own preprocessing
+        arr = arr.astype('float32')
+        if model_type == "MobileNetV2":
+            arr = mobilenet_preprocess(arr)
+        elif model_type == "EfficientNetB0":
+            arr = efficientnet_preprocess(arr)
+        x = np.expand_dims(arr, 0)  # (1,H,W,3)
 
-def preprocess_grayscale_to_1channel(img_array: np.ndarray) -> np.ndarray:
-    """
-    For baseline CNN that expects (48,48,1).
-    Input: 2D grayscale uint8 array (48x48)
-    Output: 4D float32 tensor (1,48,48,1) scaled to [0,1]
-    """
-    x = (img_array / 255.0).astype('float32')
-    return np.expand_dims(x, axis=(0, -1))  # (1,48,48,1)
-
-def predict(model, input_tensor: np.ndarray):
-    """
-    Run prediction on the input tensor.
-    Returns: (probabilities array, top_label string, top_index int)
-    """
-    probs = model.predict(input_tensor, verbose=0)[0]  # (num_classes,)
-    top_idx = int(np.argmax(probs))
-    return probs, EMOTIONS[top_idx], top_idx
+    probs = model.predict(x, verbose=0)[0]
+    idx = np.argmax(probs)
+    return probs, EMOTIONS[idx], idx

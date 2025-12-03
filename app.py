@@ -2,188 +2,170 @@ import os
 import numpy as np
 import streamlit as st
 from PIL import Image
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, classification_report
 
-from predict import (
-    load_model,
-    preprocess_grayscale_to_rgb48,
-    preprocess_grayscale_to_1channel,
-    predict,
-)
+# Import from predict.py
+from predict import load_model, predict
 
-# -----------------------------
-# ✅ Page config (must be first Streamlit command)
-# -----------------------------
-st.set_page_config(page_title="Facial Emotion Recognition", page_icon="😎", layout="centered")
-
-# -----------------------------
-# Cyberpunk / Anime UI Styling
-# -----------------------------
-st.markdown(
-    """
-    <style>
-    /* Global background and font */
-    body {
-        background-color: #0d0d0d;
-        color: #00ffcc;
-        font-family: 'Orbitron', sans-serif;
-    }
-
-    /* Sidebar styling */
-    .stSidebar {
-        background-color: #1a1a1a;
-        color: #00ffcc;
-    }
-
-    /* Buttons */
-    .stButton>button {
-        background-color: #ff00ff;
-        color: white;
-        border-radius: 8px;
-        font-weight: bold;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        background-color: #00ffcc;
-        color: black;
-    }
-
-    /* Headers */
-    h1, h2, h3 {
-        color: #ff00ff;
-        text-shadow: 0px 0px 8px #00ffcc;
-    }
-
-    /* Sidebar title */
-    .css-1d391kg {
-        color: #ff00ff !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+# Emotion classes (update if dataset changes)
+EMOTIONS = ['angry', 'disgust', 'happy', 'neutral', 'sad', 'surprise']
 
 # -----------------------------
-# UI: Title and intro
+# Page config + Cyberpunk style
 # -----------------------------
-st.title("Facial Emotion Recognition Demo")
-st.write("Select a model, upload an image or use your webcam, and see the predicted emotion.")
+st.set_page_config(page_title="Facial Emotion Recognition", layout="centered")
+st.markdown("""
+<style>
+    .main {background-color: #0a0a0a; color: #00ffcc;}
+    .stButton>button {background: #ff00ff; color: white; border-radius: 10px; font-weight: bold;}
+    .stButton>button:hover {background: #00ffcc; color: black;}
+    h1, h2, h3 {color: #ff00ff; text-shadow: 0 0 10px #00ffcc;}
+</style>
+""", unsafe_allow_html=True)
 
 # -----------------------------
-# Sidebar: Model selection
+# Sidebar navigation
 # -----------------------------
-model_choice = st.sidebar.selectbox(
-    "Choose a model",
-    ["MobileNetV2 (transfer)", "EfficientNetB0 (transfer)", "Baseline CNN"],
-    index=0,
-)
+page = st.sidebar.radio("Navigation", ["Prediction", "Evaluation"])
 
-# Set model paths. Adjust names to match your actual files.
+# -----------------------------
+# MODEL PATHS
+# -----------------------------
 MODEL_PATHS = {
-    "MobileNetV2 (transfer)": "models/emotion_mobilenet.keras",
-    "EfficientNetB0 (transfer)": "models/emotion_efficientnet.keras",
-    "Baseline CNN": "models/emotion_model.keras",
+    "MobileNetV2": "models/emotion_mobilenet.keras",
+    "EfficientNetB0": "models/emotion_efficientnet.keras",
+    "Baseline CNN": "models/baseline_cnn.keras",
 }
 
-selected_model_path = MODEL_PATHS[model_choice]
-
 # -----------------------------
-# Cache: Model loader
+# Prediction Page
 # -----------------------------
-@st.cache_resource(show_spinner=True)
-def get_model(path: str):
-    return load_model(path)
+if page == "Prediction":
+    st.title("Facial Emotion Recognition")
+    st.write("Upload a photo or use webcam → AI detects your emotion in real-time.")
 
-# Try to load model, handle missing file gracefully
-model = None
-if not os.path.exists(selected_model_path):
-    st.warning(
-        f"Model file not found: {selected_model_path}\n\n"
-        "Place the correct .keras file in the 'models/' folder OR update MODEL_PATHS accordingly.\n"
-        "For now, you can still explore the UI, but predictions will be disabled."
+    # Model selection
+    model_choice = st.sidebar.selectbox(
+        "Choose Model",
+        ["MobileNetV2", "EfficientNetB0", "Baseline CNN"],
+        index=0
     )
-else:
-    try:
-        model = get_model(selected_model_path)
-        st.success(f"Loaded model: {model_choice}")
-    except Exception as e:
-        st.error(f"Failed to load model from {selected_model_path}.\n\nError: {e}")
+
+    path = MODEL_PATHS[model_choice]
+
+    def get_model(p):
+        return load_model(p)
+
+    if not os.path.exists(path):
+        st.error(f"Model not found: {path}\n\n"
+                 "→ Run the training script for this model first!\n"
+                 "   python train_mobilenet.py   (or train_efficientnet.py / train_baseline_cnn.py)")
         st.stop()
 
-# -----------------------------
-# Inputs: File upload or webcam
-# -----------------------------
-st.subheader("Input image")
-col1, col2 = st.columns(2)
-with col1:
-    uploaded_file = st.file_uploader(
-        "Upload a face image (will be converted to 48×48 grayscale)",
-        type=["png", "jpg", "jpeg"],
-        help="Clear, front-facing face works best."
-    )
-with col2:
-    camera_image = st.camera_input("Or capture from webcam")
+    model = get_model(path)
+    st.success(f"Loaded: {model_choice}")
 
-# -----------------------------
-# Helper: Prepare image
-# -----------------------------
-def prepare_image_to_48x48_grayscale(img: Image.Image) -> np.ndarray:
-    # Convert to grayscale and resize to 48x48
-    img_gray = img.convert("L").resize((48, 48))
-    return np.array(img_gray)
+    # Input: Upload or Webcam
+    col1, col2 = st.columns(2)
+    with col1:
+        uploaded = st.file_uploader("Upload Image", type=["jpg", "jpeg", "png"])
+    with col2:
+        camera = st.camera_input("Webcam Capture")
 
-# -----------------------------
-# Predict flow
-# -----------------------------
-if uploaded_file or camera_image:
-    if model is None:
-        st.error("Model not loaded. Please add the correct .keras file and reload the app.")
-        st.stop()
+    # Prediction flow
+    if uploaded or camera:
+        img = Image.open(uploaded or camera)
 
-    # Load the input image
-    pil_img = Image.open(uploaded_file or camera_image)
-    img_array = prepare_image_to_48x48_grayscale(pil_img)
+        if model_choice == "Baseline CNN":
+            gray = img.convert('L').resize((48, 48))
+            arr = np.array(gray)
+            probs, label, idx = predict(model, arr, is_baseline=True)
 
-    # Choose preprocessing based on model type
-    if model_choice == "Baseline CNN":
-        input_tensor = preprocess_grayscale_to_1channel(img_array)
+        elif model_choice == "MobileNetV2":
+            rgb = img.convert('RGB').resize((160, 160))
+            arr = np.array(rgb)
+            probs, label, idx = predict(model, arr, is_baseline=False, model_type="MobileNetV2")
+
+        elif model_choice == "EfficientNetB0":
+            rgb = img.convert('RGB').resize((224, 224))
+            arr = np.array(rgb)
+            probs, label, idx = predict(model, arr, is_baseline=False, model_type="EfficientNetB0")
+
+        # Display results
+        st.image(img, caption="Your Photo", use_column_width=True)
+        st.markdown(f"## Predicted: **{label.upper()}**")
+
+        # Bar chart
+        chart_data = {e.capitalize(): float(p) for e, p in zip(EMOTIONS, probs)}
+        st.bar_chart(chart_data)
+
+        # Top-3 predictions
+        st.write("### Top 3 Predictions")
+        top3_idx = np.argsort(probs)[-3:][::-1]
+        for i in top3_idx:
+            st.write(f"- **{EMOTIONS[i].capitalize()}**: {probs[i]:.3f}")
+
     else:
-        input_tensor = preprocess_grayscale_to_rgb48(img_array)
-
-    # Run prediction
-    probs, label, idx = predict(model, input_tensor)
-
-    # -------------------------
-    # Display results
-    # -------------------------
-    st.subheader("Result")
-    c_img, c_pred = st.columns([1, 1])
-
-    with c_img:
-        st.image(pil_img, caption="Input image", use_column_width=True)
-
-    with c_pred:
-        st.markdown(f"**Predicted emotion:** {label}")
-        st.bar_chart(probs)
-
-    # Top-3 breakdown for clarity
-    st.subheader("Top-3 probabilities")
-    EMOTIONS = ['angry','disgust','fear','happy','neutral','sad','surprise']
-    top_indices = np.argsort(probs)[::-1][:3]
-    for rank, i in enumerate(top_indices, 1):
-        st.write(f"{rank}. {EMOTIONS[i]} — {probs[i]:.3f}")
-
-else:
-    st.info("Upload an image or use the webcam to run a prediction.")
+        st.info("Upload an image or use the webcam to see the magic!")
 
 # -----------------------------
-# Sidebar: About section
+# Evaluation Page
 # -----------------------------
-st.sidebar.markdown("## About this demo")
-st.sidebar.info(
-    "This app demonstrates **Facial Emotion Recognition** using three models:\n\n"
-    "- MobileNetV2 (transfer learning)\n"
-    "- EfficientNetB0 (transfer learning)\n"
-    "- Baseline CNN\n\n"
-    "Upload a face image or use your webcam to see predictions.\n\n"
-    "Cyberpunk UI inspired by anime aesthetics ✨"
-)
+elif page == "Evaluation":
+    st.title("Model Evaluation Dashboard")
+
+    model_choice = st.selectbox("Choose Model to Evaluate", ["Baseline CNN", "MobileNetV2", "EfficientNetB0"])
+    path = MODEL_PATHS[model_choice]
+
+    if not os.path.exists(path):
+        st.error(f"Model not found: {path}\n\nTrain the model first!")
+        st.stop()
+
+    model = tf.keras.models.load_model(path)
+    st.success(f"✅ Loaded model: {model_choice}")
+
+    # Pick correct input size
+    if model_choice == "Baseline CNN":
+        target_size, color_mode = (48,48), "grayscale"
+    elif model_choice == "MobileNetV2":
+        target_size, color_mode = (160,160), "rgb"
+    else:
+        target_size, color_mode = (224,224), "rgb"
+
+    datagen = ImageDataGenerator(rescale=1./255)
+    test_gen = datagen.flow_from_directory(
+        "data/archive/test",
+        target_size=target_size,
+        color_mode=color_mode,
+        batch_size=64,
+        class_mode="categorical",
+        shuffle=False
+    )
+
+    # Evaluate
+    loss, acc = model.evaluate(test_gen, verbose=0)
+    st.markdown(f"### 📊 Test Accuracy: **{acc:.4f}**")
+    st.markdown(f"### 📉 Test Loss: **{loss:.4f}**")
+
+    # Confusion matrix
+    y_true = test_gen.classes
+    y_pred = np.argmax(model.predict(test_gen), axis=1)
+
+    cm = confusion_matrix(y_true, y_pred)
+    labels = list(test_gen.class_indices.keys())
+
+    fig, ax = plt.subplots(figsize=(8,6))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="coolwarm",
+                xticklabels=labels, yticklabels=labels, ax=ax)
+    plt.ylabel("True Label")
+    plt.xlabel("Predicted Label")
+    plt.title(f"Confusion Matrix - {model_choice}")
+    st.pyplot(fig)
+
+    # Classification report
+    report = classification_report(y_true, y_pred, target_names=labels)
+    st.text("Classification Report:\n" + report)
