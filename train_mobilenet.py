@@ -35,9 +35,9 @@ base.trainable = False  # Stage 1: freeze backbone
 
 x = base.output
 x = GlobalAveragePooling2D()(x)
-x = Dense(128, activation='relu')(x)   # ✅ fixed
-x = Dropout(0.5)(x)                    # ✅ fixed
-outputs = Dense(train_gen.num_classes, activation='softmax')(x)  # ✅ fixed
+x = Dense(128, activation='relu')(x)   
+x = Dropout(0.5)(x)                    
+outputs = Dense(train_gen.num_classes, activation='softmax')(x)  
 model = Model(inputs, outputs)
 
 # Stage 1: train head

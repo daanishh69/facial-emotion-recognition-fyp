@@ -27,7 +27,7 @@ val_gen = datagen.flow_from_directory(
     class_mode="categorical"
 )
 
-# Model
+# Build model
 model = Sequential([
     Conv2D(32, (3,3), activation='relu', input_shape=(48,48,1)),
     BatchNormalization(),
