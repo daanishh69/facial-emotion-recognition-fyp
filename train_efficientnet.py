@@ -40,7 +40,7 @@ os.makedirs("models", exist_ok=True)
 # ──────────────────────────────────────────────
 # CONFIG
 # ──────────────────────────────────────────────
-DATA_DIR   = r"C:\Users\Danish Omar\Desktop\SEM5\FYPPROJECT\data\archive"
+DATA_DIR   = r"C:\Users\User\Desktop\SEM5\FYPPROJECT\data\archive"
 BATCH_SIZE = 32    # smaller batch — more stable for EfficientNet fine-tuning
 IMG_SIZE   = (260, 260)   # EfficientNetB0's native resolution (was wrong 224 in FYP1)
 EPOCHS_S1  = 30

@@ -26,7 +26,7 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 # ──────────────────────────────────────────────
 # CONFIG — update this path to your local setup
 # ──────────────────────────────────────────────
-DATA_DIR = r"C:\Users\Danish Omar\Desktop\SEM5\FYPPROJECT\data\archive"
+DATA_DIR = r"C:\Users\User\Desktop\SEM5\FYPPROJECT\data\archive"
 
 EMOTIONS = ['angry', 'disgust', 'happy', 'neutral', 'sad', 'surprise']
 
