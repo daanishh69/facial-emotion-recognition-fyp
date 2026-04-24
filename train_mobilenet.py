@@ -1,17 +1,12 @@
 """
-train_mobilenet.py  —  FYP2 Improved MobileNetV2
-=================================================
-Key improvements over FYP1:
-  1. Strong data augmentation during training
-  2. Class weights loaded from class_weights.json (fixes imbalance)
-  3. Better head architecture (two Dense layers + BN)
-  4. Label smoothing in loss function
-  5. Proper two-stage fine-tuning with warm-up LR
-  6. Unfreeze more layers in Stage 2 (last 50 instead of 30)
-  7. Separate callbacks per stage with correct model path
-
-Expected improvement: 63% → 73%+ accuracy
-Run data_prep.py first to generate class_weights.json
+train_mobilenet.py  —  FYP2 MobileNetV2 on RAF-DB
+==================================================
+Changes from FER+ version:
+  1. DATA_DIR updated to RAF-DB dataset path
+  2. 7 classes instead of 6 (adds Fear)
+  3. IMG_SIZE kept at (160, 160) — RAF-DB is higher res so better results
+  4. All improvements from FYP2 kept:
+     - Class weights, augmentation, better head, label smoothing
 
 Usage:
     python train_mobilenet.py
@@ -36,11 +31,11 @@ os.makedirs("models", exist_ok=True)
 # ──────────────────────────────────────────────
 # CONFIG
 # ──────────────────────────────────────────────
-DATA_DIR   = r"C:\Users\Danish Omar\Desktop\SEM5\FYPPROJECT\data\archive"
-BATCH_SIZE = 64
+DATA_DIR   = r"C:\Users\Danish Omar\Desktop\SEM5\FYPPROJECT\data\DATASET"
+BATCH_SIZE = 32
 IMG_SIZE   = (160, 160)
-EPOCHS_S1  = 30    # Stage 1: train head only (fewer needed)
-EPOCHS_S2  = 200   # Stage 2: fine-tune backbone (early stopping handles this)
+EPOCHS_S1  = 30
+EPOCHS_S2  = 200
 
 # ──────────────────────────────────────────────
 # LOAD CLASS WEIGHTS
@@ -65,7 +60,7 @@ train_gen = get_transfer_augmented_datagen(preprocess_input).flow_from_directory
 )
 
 val_gen = get_transfer_val_datagen(preprocess_input).flow_from_directory(
-    os.path.join(DATA_DIR, "validation"),
+    os.path.join(DATA_DIR, "val"),
     target_size=IMG_SIZE,
     color_mode="rgb",
     batch_size=BATCH_SIZE,
@@ -75,6 +70,7 @@ val_gen = get_transfer_val_datagen(preprocess_input).flow_from_directory(
 
 NUM_CLASSES = train_gen.num_classes
 print(f"\n✓ Classes found: {train_gen.class_indices}")
+print(f"✓ NUM_CLASSES: {NUM_CLASSES}")
 print(f"✓ Training samples:   {train_gen.samples}")
 print(f"✓ Validation samples: {val_gen.samples}\n")
 
@@ -83,12 +79,10 @@ print(f"✓ Validation samples: {val_gen.samples}\n")
 # ──────────────────────────────────────────────
 inputs = Input(shape=(160, 160, 3))
 base = MobileNetV2(weights='imagenet', include_top=False, input_tensor=inputs)
-base.trainable = False  # Stage 1: freeze all backbone layers
+base.trainable = False
 
 x = base.output
 x = GlobalAveragePooling2D()(x)
-
-# FYP2: better head — two Dense layers with BN and L2
 x = Dense(512, activation='relu', kernel_regularizer=l2(1e-4))(x)
 x = BatchNormalization()(x)
 x = Dropout(0.5)(x)
@@ -97,7 +91,7 @@ x = BatchNormalization()(x)
 x = Dropout(0.3)(x)
 outputs = Dense(NUM_CLASSES, activation='softmax')(x)
 
-model = Model(inputs, outputs, name="MobileNetV2_FYP2")
+model = Model(inputs, outputs, name="MobileNetV2_RAFDB")
 model.summary()
 
 # ──────────────────────────────────────────────
@@ -145,6 +139,9 @@ history_s1 = model.fit(
     class_weight=class_weights
 )
 
+best_s1_acc = max(history_s1.history['val_accuracy'])
+print(f"\n✓ Stage 1 complete. Best val accuracy: {best_s1_acc:.4f}")
+
 # ──────────────────────────────────────────────
 # STAGE 2 — Fine-tune backbone (last 50 layers)
 # ──────────────────────────────────────────────
@@ -152,7 +149,6 @@ print("\n" + "=" * 50)
 print("  STAGE 2 — Fine-tuning backbone (last 50 layers)")
 print("=" * 50)
 
-# FYP2: unfreeze last 50 layers (FYP1 only did last 30)
 for layer in base.layers:
     layer.trainable = False
 for layer in base.layers[-50:]:
@@ -161,7 +157,6 @@ for layer in base.layers[-50:]:
 trainable_count = sum(1 for l in model.layers if l.trainable)
 print(f"✓ Trainable layers in Stage 2: {trainable_count}")
 
-# Lower LR for fine-tuning — prevents catastrophic forgetting
 model.compile(
     optimizer=Adam(learning_rate=1e-4),
     loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
@@ -170,7 +165,7 @@ model.compile(
 
 callbacks_s2 = [
     tf.keras.callbacks.ModelCheckpoint(
-        "models/emotion_mobilenet.keras",   # final model used by app.py
+        "models/emotion_mobilenet.keras",
         save_best_only=True,
         monitor='val_accuracy',
         mode='max',
@@ -200,7 +195,7 @@ history_s2 = model.fit(
     class_weight=class_weights
 )
 
-print("\n✓ Training complete!")
+best_s2_acc = max(history_s2.history['val_accuracy'])
+print(f"\n✓ Training complete!")
+print(f"✓ Best val_accuracy: {best_s2_acc:.4f} ({best_s2_acc*100:.2f}%)")
 print(f"✓ Best model saved → models/emotion_mobilenet.keras")
-print(f"✓ Stage 1 history  → models/mobilenet_stage1_history.csv")
-print(f"✓ Stage 2 history  → models/mobilenet_stage2_history.csv")

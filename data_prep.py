@@ -1,197 +1,261 @@
 """
-data_prep.py  —  FYP2 Dataset Analysis & Class Imbalance Fix
-=============================================================
-Run this FIRST before any training script.
+data_prep.py  —  FYP2 RAF-DB Dataset Preparation
+==================================================
+For this folder structure:
+  FYPPROJECT/
+    data/
+      DATASET/
+        train/
+          1/  2/  3/  4/  5/  6/  7/
+        test/
+          1/  2/  3/  4/  5/  6/  7/
+    train_labels.csv
+    test_labels.csv
 
-What it does:
-  1. Scans your train/val/test folders and prints class distribution
-  2. Visualizes the imbalance as a bar chart (saved as class_distribution.png)
-  3. Computes class weights to handle imbalance during training
-  4. Saves class_weights.json → used automatically by all training scripts
-  5. Defines the improved ImageDataGenerator with strong augmentation
+RAF-DB Label Mapping:
+  1 = Surprise
+  2 = Fear
+  3 = Disgust
+  4 = Happy
+  5 = Sad
+  6 = Angry
+  7 = Neutral
+
+What this script does:
+  1. Renames numbered folders (1-7) to emotion names
+  2. Creates val/ split from train/ (20%, stratified)
+  3. Visualizes class distribution
+  4. Computes & saves class_weights.json
 
 Usage:
     python data_prep.py
-
-Make sure DATA_DIR below points to your local dataset root folder.
 """
 
 import os
 import json
+import shutil
+import random
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.utils.class_weight import compute_class_weight
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 # ──────────────────────────────────────────────
-# CONFIG — update this path to your local setup
+# CONFIG
 # ──────────────────────────────────────────────
-DATA_DIR = r"C:\Users\User\Desktop\SEM5\FYPPROJECT\data\archive"
+BASE_DIR    = r"C:\Users\Danish Omar\Desktop\SEM5\FYPPROJECT"
+DATASET_DIR = os.path.join(BASE_DIR, "data", "DATASET")
+TRAIN_DIR   = os.path.join(DATASET_DIR, "train")
+TEST_DIR    = os.path.join(DATASET_DIR, "test")
+VAL_DIR     = os.path.join(DATASET_DIR, "val")
 
-EMOTIONS = ['angry', 'disgust', 'happy', 'neutral', 'sad', 'surprise']
+VAL_SPLIT   = 0.2
+RANDOM_SEED = 42
 
-TRAIN_DIR = os.path.join(DATA_DIR, "train")
-VAL_DIR   = os.path.join(DATA_DIR, "validation")
-TEST_DIR  = os.path.join(DATA_DIR, "test")
+# RAF-DB number → emotion name
+LABEL_MAP = {
+    "1": "surprise",
+    "2": "fear",
+    "3": "disgust",
+    "4": "happy",
+    "5": "sad",
+    "6": "angry",
+    "7": "neutral"
+}
 
-
-# ──────────────────────────────────────────────
-# 1. COUNT SAMPLES PER CLASS
-# ──────────────────────────────────────────────
-def count_samples(directory):
-    counts = {}
-    for emotion in sorted(os.listdir(directory)):
-        path = os.path.join(directory, emotion)
-        if os.path.isdir(path):
-            counts[emotion] = len(os.listdir(path))
-    return counts
-
-print("=" * 50)
-print("  DATASET CLASS DISTRIBUTION ANALYSIS")
-print("=" * 50)
-
-train_counts = count_samples(TRAIN_DIR)
-val_counts   = count_samples(VAL_DIR)
-test_counts  = count_samples(TEST_DIR)
-
-print(f"\n{'Emotion':<12} {'Train':>8} {'Val':>8} {'Test':>8}  {'Imbalance Ratio':>16}")
-print("-" * 56)
-
-train_values = list(train_counts.values())
-max_train = max(train_values)
-
-for emotion in train_counts:
-    tr = train_counts.get(emotion, 0)
-    va = val_counts.get(emotion, 0)
-    te = test_counts.get(emotion, 0)
-    ratio = max_train / tr if tr > 0 else 999
-    flag = "  ⚠ SEVERE" if ratio > 5 else ("  ⚠ HIGH" if ratio > 2 else "")
-    print(f"{emotion:<12} {tr:>8} {va:>8} {te:>8}  {ratio:>10.1f}x {flag}")
-
-total_train = sum(train_counts.values())
-print("-" * 56)
-print(f"{'TOTAL':<12} {total_train:>8}")
-
-print(f"\n→ Most imbalanced class: "
-      f"{min(train_counts, key=train_counts.get)} "
-      f"({min(train_counts.values())} samples)")
-print(f"→ Most common class:     "
-      f"{max(train_counts, key=train_counts.get)} "
-      f"({max(train_counts.values())} samples)")
-
+EMOTIONS = ["surprise", "fear", "disgust", "happy", "sad", "angry", "neutral"]
 
 # ──────────────────────────────────────────────
-# 2. VISUALIZE CLASS DISTRIBUTION
+# 1. RENAME NUMBERED FOLDERS TO EMOTION NAMES
+# ──────────────────────────────────────────────
+print("=" * 55)
+print("  RAF-DB DATASET PREPARATION")
+print("=" * 55)
+
+def rename_folders(directory):
+    """Rename 1/ 2/ 3/... to surprise/ fear/ disgust/..."""
+    renamed = 0
+    for num, emotion in LABEL_MAP.items():
+        src = os.path.join(directory, num)
+        dst = os.path.join(directory, emotion)
+        if os.path.exists(src) and not os.path.exists(dst):
+            os.rename(src, dst)
+            print(f"  Renamed: {num}/ → {emotion}/")
+            renamed += 1
+        elif os.path.exists(dst):
+            print(f"  Already exists: {emotion}/  (skipping)")
+    return renamed
+
+print("\n→ Renaming train folders...")
+rename_folders(TRAIN_DIR)
+
+print("\n→ Renaming test folders...")
+rename_folders(TEST_DIR)
+
+print("\n✓ Folder renaming complete!")
+
+# ──────────────────────────────────────────────
+# 2. CREATE VALIDATION SPLIT FROM TRAIN
+# ──────────────────────────────────────────────
+print("\n→ Creating validation split (20% of train)...")
+
+# Create val folder structure
+for emotion in EMOTIONS:
+    os.makedirs(os.path.join(VAL_DIR, emotion), exist_ok=True)
+
+random.seed(RANDOM_SEED)
+total_moved = 0
+
+for emotion in EMOTIONS:
+    train_emotion_dir = os.path.join(TRAIN_DIR, emotion)
+    val_emotion_dir   = os.path.join(VAL_DIR, emotion)
+
+    if not os.path.exists(train_emotion_dir):
+        print(f"  ⚠ Folder not found: {train_emotion_dir}")
+        continue
+
+    # Check if val already has images (avoid re-splitting)
+    existing_val = os.listdir(val_emotion_dir)
+    if len(existing_val) > 0:
+        print(f"  {emotion:<10} — val already exists ({len(existing_val)} images), skipping")
+        continue
+
+    all_images = [f for f in os.listdir(train_emotion_dir)
+                  if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+
+    n_val = max(1, int(len(all_images) * VAL_SPLIT))
+    val_images = random.sample(all_images, n_val)
+
+    for img in val_images:
+        src = os.path.join(train_emotion_dir, img)
+        dst = os.path.join(val_emotion_dir, img)
+        shutil.move(src, dst)
+
+    total_moved += n_val
+    print(f"  {emotion:<10} — moved {n_val} images to val/")
+
+print(f"\n✓ Validation split complete! {total_moved} images moved to val/")
+
+# ──────────────────────────────────────────────
+# 3. PRINT CLASS DISTRIBUTION
+# ──────────────────────────────────────────────
+print("\n" + "=" * 55)
+print("  FINAL CLASS DISTRIBUTION")
+print("=" * 55)
+
+print(f"\n{'Emotion':<12} {'Train':>8} {'Val':>8} {'Test':>8}  {'Ratio':>8}")
+print("-" * 52)
+
+train_counts = {}
+for emotion in EMOTIONS:
+    folder = os.path.join(TRAIN_DIR, emotion)
+    train_counts[emotion] = len(os.listdir(folder)) if os.path.exists(folder) else 0
+
+max_count = max(train_counts.values()) if train_counts else 1
+
+for emotion in EMOTIONS:
+    tr_folder  = os.path.join(TRAIN_DIR, emotion)
+    val_folder = os.path.join(VAL_DIR,   emotion)
+    te_folder  = os.path.join(TEST_DIR,  emotion)
+
+    tr = len(os.listdir(tr_folder))  if os.path.exists(tr_folder)  else 0
+    va = len(os.listdir(val_folder)) if os.path.exists(val_folder) else 0
+    te = len(os.listdir(te_folder))  if os.path.exists(te_folder)  else 0
+
+    ratio = max_count / tr if tr > 0 else 999
+    flag  = "  ⚠ SEVERE" if ratio > 5 else ("  ⚠ HIGH" if ratio > 2 else "")
+    print(f"{emotion:<12} {tr:>8} {va:>8} {te:>8}  {ratio:>6.1f}x{flag}")
+
+# ──────────────────────────────────────────────
+# 4. VISUALIZE CLASS DISTRIBUTION
 # ──────────────────────────────────────────────
 fig, axes = plt.subplots(1, 3, figsize=(16, 5))
-fig.suptitle("FER+ Dataset Class Distribution", fontsize=14, fontweight='bold')
+fig.suptitle("RAF-DB Class Distribution", fontsize=14, fontweight='bold')
 
-for ax, (counts, split) in zip(axes, [
-    (train_counts, "Train"),
-    (val_counts,   "Validation"),
-    (test_counts,  "Test")
+for ax, (split_name, split_dir) in zip(axes, [
+    ("Train", TRAIN_DIR),
+    ("Val",   VAL_DIR),
+    ("Test",  TEST_DIR)
 ]):
-    emotions = list(counts.keys())
-    values   = list(counts.values())
-    colors   = ['#e74c3c' if v == min(values) else
-                '#2ecc71' if v == max(values) else
-                '#3498db' for v in values]
+    counts = {}
+    for emotion in EMOTIONS:
+        folder = os.path.join(split_dir, emotion)
+        counts[emotion] = len(os.listdir(folder)) if os.path.exists(folder) else 0
 
-    bars = ax.bar(emotions, values, color=colors, edgecolor='black', linewidth=0.5)
-    ax.set_title(f"{split} Set", fontweight='bold')
+    values = list(counts.values())
+    colors = ['#e74c3c' if v == min(values) else
+              '#2ecc71' if v == max(values) else
+              '#3498db' for v in values]
+
+    bars = ax.bar(counts.keys(), values, color=colors,
+                  edgecolor='black', linewidth=0.5)
+    ax.set_title(f"{split_name} Set", fontweight='bold')
     ax.set_xlabel("Emotion")
-    ax.set_ylabel("Sample Count")
-    ax.tick_params(axis='x', rotation=30)
+    ax.set_ylabel("Count")
+    ax.tick_params(axis='x', rotation=35)
 
     for bar, val in zip(bars, values):
-        ax.text(bar.get_x() + bar.get_width() / 2,
-                bar.get_height() + 20,
+        ax.text(bar.get_x() + bar.get_width()/2,
+                bar.get_height() + 3,
                 str(val), ha='center', va='bottom', fontsize=8)
 
 plt.tight_layout()
 plt.savefig("class_distribution.png", dpi=150, bbox_inches='tight')
-print("\n✓ Saved class distribution chart → class_distribution.png")
+print("\n✓ Saved → class_distribution.png")
 plt.show()
 
-
 # ──────────────────────────────────────────────
-# 3. COMPUTE CLASS WEIGHTS
+# 5. COMPUTE CLASS WEIGHTS
 # ──────────────────────────────────────────────
-# Build label array from train folder
+emotion_to_idx = {e: i for i, e in enumerate(EMOTIONS)}
 y_train = []
-class_to_idx = {e: i for i, e in enumerate(sorted(train_counts.keys()))}
 
-for emotion, idx in class_to_idx.items():
+for emotion, idx in emotion_to_idx.items():
     folder = os.path.join(TRAIN_DIR, emotion)
-    if os.path.isdir(folder):
+    if os.path.exists(folder):
         count = len(os.listdir(folder))
         y_train.extend([idx] * count)
 
-y_train = np.array(y_train)
-classes = np.unique(y_train)
+y_train  = np.array(y_train)
+classes  = np.unique(y_train)
+weights  = compute_class_weight(class_weight='balanced', classes=classes, y=y_train)
+cw_dict  = {int(k): float(v) for k, v in zip(classes, weights)}
 
-weights = compute_class_weight(
-    class_weight='balanced',
-    classes=classes,
-    y=y_train
-)
-
-class_weight_dict = {int(k): float(v) for k, v in zip(classes, weights)}
-
-print("\n" + "=" * 50)
+print("\n" + "=" * 55)
 print("  COMPUTED CLASS WEIGHTS")
-print("=" * 50)
-idx_to_emotion = {v: k for k, v in class_to_idx.items()}
-for idx, weight in class_weight_dict.items():
+print("=" * 55)
+
+idx_to_emotion = {v: k for k, v in emotion_to_idx.items()}
+for idx, weight in cw_dict.items():
     emotion = idx_to_emotion.get(idx, str(idx))
     bar = "█" * int(weight * 4)
     print(f"  [{idx}] {emotion:<10}  weight = {weight:.4f}  {bar}")
 
-print("\n→ Higher weight = model penalized MORE for missing that class")
-print("→ This forces the model to pay attention to disgust & sad")
-
-# Save to JSON
 with open("class_weights.json", "w") as f:
-    json.dump(class_weight_dict, f, indent=2)
+    json.dump(cw_dict, f, indent=2)
 
-print("\n✓ Saved class weights → class_weights.json")
-print("  (All training scripts will load this automatically)\n")
-
+print("\n✓ Saved → class_weights.json")
 
 # ──────────────────────────────────────────────
-# 4. IMPROVED DATA GENERATORS
+# 6. DATA GENERATORS (imported by training scripts)
 # ──────────────────────────────────────────────
-# These are imported by training scripts — do not run standalone
-
 def get_augmented_datagen():
-    """
-    Strong augmentation for training.
-    Especially helps minority classes (disgust, sad) by creating
-    more varied versions of the limited samples.
-    """
     return ImageDataGenerator(
         rescale=1./255,
-        rotation_range=20,          # rotate ±20°
-        width_shift_range=0.15,     # shift horizontally ±15%
-        height_shift_range=0.15,    # shift vertically ±15%
-        zoom_range=0.15,            # zoom in/out ±15%
-        horizontal_flip=True,       # mirror faces (natural variation)
-        shear_range=0.1,            # slight shear distortion
-        brightness_range=[0.8, 1.2],# lighting variation
+        rotation_range=20,
+        width_shift_range=0.15,
+        height_shift_range=0.15,
+        zoom_range=0.15,
+        horizontal_flip=True,
+        shear_range=0.1,
+        brightness_range=[0.8, 1.2],
         fill_mode='nearest'
     )
 
 def get_val_datagen():
-    """
-    Validation/test generators — NO augmentation, just rescale.
-    """
     return ImageDataGenerator(rescale=1./255)
 
 def get_transfer_augmented_datagen(preprocess_fn):
-    """
-    Augmented generator for transfer learning models (MobileNetV2, EfficientNetB0).
-    Uses model-specific preprocessing instead of simple rescale.
-    """
     return ImageDataGenerator(
         preprocessing_function=preprocess_fn,
         rotation_range=20,
@@ -205,35 +269,26 @@ def get_transfer_augmented_datagen(preprocess_fn):
     )
 
 def get_transfer_val_datagen(preprocess_fn):
-    """
-    Val/test generator for transfer learning models.
-    """
     return ImageDataGenerator(preprocessing_function=preprocess_fn)
 
 
 # ──────────────────────────────────────────────
-# 5. SUMMARY
+# 7. SUMMARY
 # ──────────────────────────────────────────────
 if __name__ == "__main__":
-    print("=" * 50)
-    print("  SUMMARY — WHAT TO DO NEXT")
-    print("=" * 50)
-    print("""
-  Files generated:
-    ✓ class_distribution.png  — visual chart of your dataset
-    ✓ class_weights.json      — weights for training scripts
+    print("\n" + "=" * 55)
+    print("  DONE — NEXT STEPS")
+    print("=" * 55)
+    print(f"""
+  Update DATA_DIR in all training scripts to:
+    {DATASET_DIR}
 
-  Next steps:
-    1. Check class_distribution.png to confirm imbalance
-    2. Run the improved training scripts:
-         python train_baseline_cnn.py
-         python train_mobilenet.py
-         python train_efficientnet.py
-    3. All scripts will automatically load class_weights.json
-       and use the augmented data generators from this file.
+  Then run:
+    python train_baseline_cnn.py
+    python train_mobilenet.py
+    python train_efficientnet.py
 
-  Expected improvement over FYP1:
-    - Disgust F1-score: 0.407 → ~0.55+
-    - Sad F1-score:     0.368 → ~0.50+
-    - Overall accuracy: 63%   → 70%+ (before model improvements)
+  Also update EMOTIONS list in all training scripts to:
+    ['surprise', 'fear', 'disgust', 'happy', 'sad', 'angry', 'neutral']
+    (7 classes instead of 6 — RAF-DB includes Fear)
     """)
