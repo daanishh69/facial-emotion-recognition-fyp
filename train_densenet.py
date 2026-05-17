@@ -1,26 +1,28 @@
 """
-train_resnet50.py  —  FYP2 ResNet50 on RAF-DB
-==============================================
-Why ResNet50 for FYP2:
-  - Replaces Baseline CNN which was too shallow for real-world faces
-  - Skip connections (residual connections) prevent vanishing gradient
-  - Better at learning subtle emotion differences (fear, disgust)
-  - Pre-trained on ImageNet — strong feature extractor for faces
-  - Higher accuracy than Baseline CNN and comparable to EfficientNetB0
+train_densenet.py  —  FYP2 DenseNet121 on RAF-DB
+=================================================
+Why DenseNet121 over ResNet50:
+  - Dense connections: every layer receives feature maps from ALL
+    preceding layers → much better feature reuse
+  - Proven superior on facial expression datasets in published papers
+  - Fewer parameters than ResNet50 but better accuracy
+  - Naturally reduces overfitting due to dense feature reuse
 
 Architecture:
-  ResNet50 backbone (ImageNet weights)
+  DenseNet121 backbone (ImageNet weights, 224×224 RGB)
   → GlobalAveragePooling2D
   → Dense(512) + BN + Dropout(0.5)
   → Dense(256) + BN + Dropout(0.3)
   → Dense(7, softmax)
 
 Two-stage training:
-  Stage 1: Train head only (backbone frozen) — 30 epochs
-  Stage 2: Fine-tune last 30 layers — up to 200 epochs
+  Stage 1: Train head only (30 epochs max)
+  Stage 2: Fine-tune last 50 layers (200 epochs max)
+
+Expected improvement over ResNet50: 76.96% → 79-82%
 
 Usage:
-    python train_resnet50.py
+    python train_densenet.py
 """
 
 import os
@@ -31,8 +33,8 @@ from tensorflow.keras.layers import (
     Dense, GlobalAveragePooling2D, Dropout, BatchNormalization
 )
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.applications import ResNet50
-from tensorflow.keras.applications.resnet50 import preprocess_input
+from tensorflow.keras.applications import DenseNet121
+from tensorflow.keras.applications.densenet import preprocess_input
 from tensorflow.keras.regularizers import l2
 from data_prep import get_transfer_augmented_datagen, get_transfer_val_datagen
 
@@ -44,7 +46,7 @@ os.makedirs("models", exist_ok=True)
 # ──────────────────────────────────────────────
 DATA_DIR   = r"C:\Users\Danish Omar\Desktop\SEM5\FYPPROJECT\data\DATASET"
 BATCH_SIZE = 32
-IMG_SIZE   = (224, 224)   # ResNet50 native resolution
+IMG_SIZE   = (224, 224)   # DenseNet121 native resolution
 EPOCHS_S1  = 30
 EPOCHS_S2  = 200
 
@@ -89,8 +91,8 @@ print(f"✓ Validation samples: {val_gen.samples}\n")
 # BUILD MODEL
 # ──────────────────────────────────────────────
 inputs = Input(shape=(224, 224, 3))
-base = ResNet50(weights='imagenet', include_top=False, input_tensor=inputs)
-base.trainable = False   # Stage 1: freeze backbone
+base   = DenseNet121(weights='imagenet', include_top=False, input_tensor=inputs)
+base.trainable = False
 
 x = base.output
 x = GlobalAveragePooling2D()(x)
@@ -102,7 +104,7 @@ x = BatchNormalization()(x)
 x = Dropout(0.3)(x)
 outputs = Dense(NUM_CLASSES, activation='softmax')(x)
 
-model = Model(inputs, outputs, name="ResNet50_RAFDB")
+model = Model(inputs, outputs, name="DenseNet121_RAFDB")
 model.summary()
 
 # ──────────────────────────────────────────────
@@ -120,7 +122,7 @@ model.compile(
 
 callbacks_s1 = [
     tf.keras.callbacks.ModelCheckpoint(
-        "models/resnet50_stage1.keras",
+        "models/densenet_stage1.keras",
         save_best_only=True,
         monitor='val_accuracy',
         mode='max',
@@ -139,7 +141,7 @@ callbacks_s1 = [
         min_lr=1e-7,
         verbose=1
     ),
-    tf.keras.callbacks.CSVLogger("models/resnet50_stage1_history.csv")
+    tf.keras.callbacks.CSVLogger("models/densenet_stage1_history.csv")
 ]
 
 history_s1 = model.fit(
@@ -158,22 +160,22 @@ if best_s1_acc < 0.25:
     exit()
 
 # ──────────────────────────────────────────────
-# STAGE 2 — Fine-tune last 30 layers
+# STAGE 2 — Fine-tune last 50 layers
 # ──────────────────────────────────────────────
 print("\n" + "=" * 50)
-print("  STAGE 2 — Fine-tuning last 30 layers")
+print("  STAGE 2 — Fine-tuning last 50 layers")
 print("=" * 50)
+print("  BatchNorm layers kept frozen for stability\n")
 
-# Unfreeze last 30 layers, keep BatchNorm frozen
+# Unfreeze last 50 layers, keep BatchNorm frozen
 for layer in base.layers:
     layer.trainable = False
-for layer in base.layers[-30:]:
+for layer in base.layers[-50:]:
     if not isinstance(layer, tf.keras.layers.BatchNormalization):
         layer.trainable = True
 
 trainable_count = sum(1 for l in model.layers if l.trainable)
 print(f"✓ Trainable layers in Stage 2: {trainable_count}")
-print("  (BatchNorm layers kept frozen)\n")
 
 model.compile(
     optimizer=Adam(learning_rate=5e-5),
@@ -183,7 +185,7 @@ model.compile(
 
 callbacks_s2 = [
     tf.keras.callbacks.ModelCheckpoint(
-        "models/emotion_resnet50.keras",
+        "models/emotion_densenet.keras",
         save_best_only=True,
         monitor='val_accuracy',
         mode='max',
@@ -191,7 +193,7 @@ callbacks_s2 = [
     ),
     tf.keras.callbacks.EarlyStopping(
         monitor='val_accuracy',
-        patience=15,
+        patience=20,
         restore_best_weights=True,
         verbose=1
     ),
@@ -202,7 +204,7 @@ callbacks_s2 = [
         min_lr=1e-9,
         verbose=1
     ),
-    tf.keras.callbacks.CSVLogger("models/resnet50_stage2_history.csv")
+    tf.keras.callbacks.CSVLogger("models/densenet_stage2_history.csv")
 ]
 
 history_s2 = model.fit(
@@ -216,6 +218,6 @@ history_s2 = model.fit(
 best_s2_acc = max(history_s2.history['val_accuracy'])
 print(f"\n✓ Training complete!")
 print(f"✓ Best val_accuracy: {best_s2_acc:.4f} ({best_s2_acc*100:.2f}%)")
-print(f"✓ Best model saved → models/emotion_resnet50.keras")
-print(f"✓ Stage 1 history  → models/resnet50_stage1_history.csv")
-print(f"✓ Stage 2 history  → models/resnet50_stage2_history.csv")
+print(f"✓ Best model saved → models/emotion_densenet.keras")
+print(f"✓ Stage 1 history  → models/densenet_stage1_history.csv")
+print(f"✓ Stage 2 history  → models/densenet_stage2_history.csv")

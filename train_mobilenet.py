@@ -1,12 +1,13 @@
 """
-train_mobilenet.py  —  FYP2 MobileNetV2 on RAF-DB
-==================================================
-Changes from FER+ version:
-  1. DATA_DIR updated to RAF-DB dataset path
-  2. 7 classes instead of 6 (adds Fear)
-  3. IMG_SIZE kept at (160, 160) — RAF-DB is higher res so better results
-  4. All improvements from FYP2 kept:
-     - Class weights, augmentation, better head, label smoothing
+train_mobilenet.py  —  FYP2 MobileNetV2 v2 (Deeper Fine-Tuning)
+================================================================
+Upgrade from v1:
+  - Stage 2 unfreezes last 80 layers (was 50)
+  - BatchNorm layers kept frozen to prevent instability
+  - Lower Stage 2 LR (5e-5 instead of 1e-4) for stability
+  - Longer patience (20 instead of 15) to give more time
+
+Expected improvement: 74.96% → 77-79%
 
 Usage:
     python train_mobilenet.py
@@ -78,7 +79,7 @@ print(f"✓ Validation samples: {val_gen.samples}\n")
 # BUILD MODEL
 # ──────────────────────────────────────────────
 inputs = Input(shape=(160, 160, 3))
-base = MobileNetV2(weights='imagenet', include_top=False, input_tensor=inputs)
+base   = MobileNetV2(weights='imagenet', include_top=False, input_tensor=inputs)
 base.trainable = False
 
 x = base.output
@@ -91,7 +92,7 @@ x = BatchNormalization()(x)
 x = Dropout(0.3)(x)
 outputs = Dense(NUM_CLASSES, activation='softmax')(x)
 
-model = Model(inputs, outputs, name="MobileNetV2_RAFDB")
+model = Model(inputs, outputs, name="MobileNetV2_v2_RAFDB")
 model.summary()
 
 # ──────────────────────────────────────────────
@@ -143,22 +144,26 @@ best_s1_acc = max(history_s1.history['val_accuracy'])
 print(f"\n✓ Stage 1 complete. Best val accuracy: {best_s1_acc:.4f}")
 
 # ──────────────────────────────────────────────
-# STAGE 2 — Fine-tune backbone (last 50 layers)
+# STAGE 2 — Deeper fine-tune (last 80 layers)
 # ──────────────────────────────────────────────
 print("\n" + "=" * 50)
-print("  STAGE 2 — Fine-tuning backbone (last 50 layers)")
+print("  STAGE 2 — Deep fine-tuning (last 80 layers)")
 print("=" * 50)
+print("  Upgrade from v1: 50 → 80 unfrozen layers")
+print("  BatchNorm layers kept frozen for stability\n")
 
+# Unfreeze last 80 layers, keep BatchNorm frozen
 for layer in base.layers:
     layer.trainable = False
-for layer in base.layers[-50:]:
-    layer.trainable = True
+for layer in base.layers[-80:]:
+    if not isinstance(layer, tf.keras.layers.BatchNormalization):
+        layer.trainable = True
 
 trainable_count = sum(1 for l in model.layers if l.trainable)
 print(f"✓ Trainable layers in Stage 2: {trainable_count}")
 
 model.compile(
-    optimizer=Adam(learning_rate=1e-4),
+    optimizer=Adam(learning_rate=5e-5),   # lower LR for stability
     loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
     metrics=['accuracy']
 )
@@ -173,7 +178,7 @@ callbacks_s2 = [
     ),
     tf.keras.callbacks.EarlyStopping(
         monitor='val_accuracy',
-        patience=15,
+        patience=20,           # more patience than v1
         restore_best_weights=True,
         verbose=1
     ),
@@ -181,7 +186,7 @@ callbacks_s2 = [
         monitor='val_loss',
         factor=0.3,
         patience=7,
-        min_lr=1e-8,
+        min_lr=1e-9,
         verbose=1
     ),
     tf.keras.callbacks.CSVLogger("models/mobilenet_stage2_history.csv")
