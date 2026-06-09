@@ -503,12 +503,12 @@ elif page == "📊 Evaluation":
     cached = load_cached_results(CACHE_FILE)
 
     if cached:
-        st.success(f"✓ Loaded: **{model_choice}** — results from cache ⚡")
+        st.success(f"✓ Loaded: **{model_choice}** — results from cache")
         col_info, col_btn = st.columns([4, 1])
         with col_info:
             st.info("Results loaded from cache. Click **Re-evaluate** to run fresh evaluation.")
         with col_btn:
-            if st.button("🔄 Re-evaluate"):
+            if st.button("Re-evaluate"):
                 # Clear both caches and re-run
                 if os.path.exists(CACHE_FILE):
                     os.remove(CACHE_FILE)
@@ -519,7 +519,7 @@ elif page == "📊 Evaluation":
         st.success(f"✓ Loaded: **{model_choice}**")
         with st.spinner("⏳ Evaluating on test set — this may take a minute..."):
             results = run_evaluation(path, model_type)
-        st.success("✓ Evaluation complete! Results cached for next time.")
+        st.success("✓ Evaluation complete!")
 
     acc    = results["acc"]
     loss   = results["loss"]

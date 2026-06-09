@@ -1,20 +1,18 @@
 """
 predict.py  —  FYP2 Final Prediction Module
 ============================================
-Models: MobileNetV2 (live detection) + ResNet50 (image upload)
-Dataset: RAF-DB (7 emotions including Fear)
-Changes from previous version:
-  1. Updated EMOTIONS to 7 classes (adds Fear)
-  2. Removed EfficientNetB0 and Baseline CNN preprocessing
-  3. Added ResNet50 preprocessing
-  4. predict_frame() and detect_face() unchanged
+Models:
+  - MobileNetV2  → Live Detection (160x160 RGB)
+  - DenseNet121  → Image Prediction (224x224 RGB)
+
+Dataset: RAF-DB (7 emotions)
 """
 
 import cv2
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input as mobilenet_preprocess
-from tensorflow.keras.applications.resnet50 import preprocess_input as resnet_preprocess
+from tensorflow.keras.applications.densenet import preprocess_input as densenet_preprocess
 
 # ──────────────────────────────────────────────
 # 7 EMOTIONS (RAF-DB)
@@ -53,7 +51,7 @@ def load_model(path):
 
 def detect_face(frame_bgr):
     """
-    Detect largest face in a BGR frame.
+    Detect largest face in a BGR frame using Haar cascade.
     Returns (x, y, w, h) or None if no face found.
     """
     gray  = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
@@ -68,16 +66,18 @@ def detect_face(frame_bgr):
 def predict(model, img_rgb, model_type):
     """
     Predict emotion from a PIL RGB image array.
-    img_rgb: numpy array (H, W, 3) in RGB format
-    model_type: "MobileNetV2" or "ResNet50"
-    Returns: (probs, label, idx)
+    img_rgb   : numpy array (H, W, 3) RGB format
+    model_type: "MobileNetV2" or "DenseNet121"
+    Returns   : (probs, label, idx)
     """
     if model_type == "MobileNetV2":
         resized = cv2.resize(img_rgb, (160, 160))
         x = mobilenet_preprocess(resized.astype('float32'))
-    elif model_type == "ResNet50":
+    elif model_type == "DenseNet121":
         resized = cv2.resize(img_rgb, (224, 224))
-        x = resnet_preprocess(resized.astype('float32'))
+        x = densenet_preprocess(resized.astype('float32'))
+    else:
+        raise ValueError(f"Unknown model_type: {model_type}")
 
     x     = np.expand_dims(x, axis=0)
     probs = model.predict(x, verbose=0)[0]
@@ -88,7 +88,7 @@ def predict(model, img_rgb, model_type):
 def predict_frame(model, frame_bgr, model_type):
     """
     Predict emotion from a full video frame.
-    Detects face first, then runs prediction on cropped face.
+    Detects face first, then predicts on cropped face.
     Returns: (probs, label, face_coords) or (None, None, None)
     """
     face_coords = detect_face(frame_bgr)
@@ -96,8 +96,6 @@ def predict_frame(model, frame_bgr, model_type):
         return None, None, None
 
     x, y, w, h = face_coords
-
-    # Add 10% padding around face
     pad = int(0.1 * w)
     x1  = max(0, x - pad)
     y1  = max(0, y - pad)
@@ -108,8 +106,6 @@ def predict_frame(model, frame_bgr, model_type):
     if face_crop.size == 0:
         return None, None, None
 
-    # Convert BGR to RGB for preprocessing
-    face_rgb = cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB)
-    probs, label, _ = predict(model, face_rgb, model_type)
-
+    face_rgb          = cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB)
+    probs, label, _   = predict(model, face_rgb, model_type)
     return probs, label, (x1, y1, x2 - x1, y2 - y1)
