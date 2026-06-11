@@ -32,6 +32,7 @@ from predict import (
     load_model, predict, predict_frame, detect_face,
     EMOTIONS, EMOTION_COLORS, EMOTION_EMOJIS
 )
+from gradcam import generate_gradcam
 
 # ──────────────────────────────────────────────
 # PAGE CONFIG
@@ -309,23 +310,56 @@ if page == "🎯 Image Prediction":
         if face is None:
             st.warning("⚠ No face detected. Please upload a photo containing a clear face.")
         else:
-            img_arr          = np.array(img)
+            img_arr           = np.array(img)
             probs, label, idx = predict(model, img_arr, "DenseNet121")
 
             col_img, col_result = st.columns([1, 1])
             with col_img:
-                # Draw face bounding box
-                x, y, w, h   = face
-                color_hex    = EMOTION_COLORS[label]
-                color_rgb    = tuple(int(color_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-                color_bgr    = (color_rgb[2], color_rgb[1], color_rgb[0])
-                display      = img_bgr.copy()
+                # Draw face bounding box on original image
+                x, y, w, h = face
+                color_hex  = EMOTION_COLORS[label]
+                color_rgb  = tuple(int(color_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+                color_bgr  = (color_rgb[2], color_rgb[1], color_rgb[0])
+                display    = img_bgr.copy()
                 cv2.rectangle(display, (x, y), (x+w, y+h), color_bgr, 2)
                 st.image(cv2.cvtColor(display, cv2.COLOR_BGR2RGB),
                          caption="Detected Face", use_container_width=True)
 
             with col_result:
                 draw_emotion_result(label, probs, idx)
+
+            # ── GRAD-CAM SECTION ──
+            st.markdown("---")
+            st.markdown("### 🔍 Explainable AI — Grad-CAM Heatmap")
+            st.markdown(
+                "<div style='color:#aaa;font-size:0.85rem;margin-bottom:12px'>"
+                "The heatmap shows which facial regions the model focused on "
+                "when predicting this emotion. "
+                "<b style='color:#FF4B4B'>Red/warm areas</b> = high attention &nbsp;|&nbsp; "
+                "<b style='color:#4B9BFF'>Blue/cool areas</b> = low attention"
+                "</div>",
+                unsafe_allow_html=True
+            )
+
+            with st.spinner("Generating Grad-CAM explanation..."):
+                # Crop the face region for Grad-CAM
+                pad    = int(0.1 * w)
+                x1     = max(0, x - pad)
+                y1     = max(0, y - pad)
+                x2     = min(img_bgr.shape[1], x + w + pad)
+                y2     = min(img_bgr.shape[0], y + h + pad)
+                face_crop = img_bgr[y1:y2, x1:x2]
+
+                gradcam_img, _ = generate_gradcam(model, face_crop, "DenseNet121", idx)
+
+            col_orig, col_heatmap = st.columns(2)
+            with col_orig:
+                face_rgb = cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB)
+                face_resized = cv2.resize(face_rgb, (224, 224))
+                st.image(face_resized, caption="Original Face", use_container_width=True)
+            with col_heatmap:
+                st.image(gradcam_img, caption=f"Grad-CAM — {label.upper()} attention map",
+                         use_container_width=True)
 
             st.markdown(f"<div class='tip-box'>{MENTAL_HEALTH_TIPS[label]}</div>",
                         unsafe_allow_html=True)
@@ -390,6 +424,15 @@ elif page == "🎥 Live Detection":
                     confidence = float(probs[np.argmax(probs)])
                     st.session_state.emotion_history.append((time.time(), label, confidence))
                     st.session_state.frame_count += 1
+
+                    # ── GRAD-CAM on live frame ──
+                    face_crop = frame_bgr[y:y+h, x:x+w]
+                    if face_crop.size > 0:
+                        gradcam_img, _ = generate_gradcam(
+                            model, face_crop, "MobileNetV2", np.argmax(probs))
+                        st.image(gradcam_img,
+                                 caption=f"🔍 Grad-CAM — {label.upper()} attention",
+                                 use_container_width=True)
                 else:
                     st.image(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB),
                              use_container_width=True, caption="No face detected")
@@ -503,12 +546,12 @@ elif page == "📊 Evaluation":
     cached = load_cached_results(CACHE_FILE)
 
     if cached:
-        st.success(f"✓ Loaded: **{model_choice}** — results from cache")
+        st.success(f"✓ Loaded: **{model_choice}** — results from cache ⚡")
         col_info, col_btn = st.columns([4, 1])
         with col_info:
             st.info("Results loaded from cache. Click **Re-evaluate** to run fresh evaluation.")
         with col_btn:
-            if st.button("Re-evaluate"):
+            if st.button("🔄 Re-evaluate"):
                 # Clear both caches and re-run
                 if os.path.exists(CACHE_FILE):
                     os.remove(CACHE_FILE)
@@ -519,7 +562,7 @@ elif page == "📊 Evaluation":
         st.success(f"✓ Loaded: **{model_choice}**")
         with st.spinner("⏳ Evaluating on test set — this may take a minute..."):
             results = run_evaluation(path, model_type)
-        st.success("✓ Evaluation complete!")
+        st.success("✓ Evaluation complete! Results cached for next time.")
 
     acc    = results["acc"]
     loss   = results["loss"]
